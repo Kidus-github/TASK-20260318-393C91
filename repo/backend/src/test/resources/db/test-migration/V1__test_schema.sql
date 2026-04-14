@@ -260,7 +260,6 @@ CREATE TABLE password_reset_tokens (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     issued_by_user_id UUID NOT NULL REFERENCES users(id),
     request_token VARCHAR(128) NOT NULL UNIQUE,
-    temporary_password_plain VARCHAR(255) NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     consumed BOOLEAN NOT NULL DEFAULT FALSE,
     consumed_at TIMESTAMP WITH TIME ZONE,

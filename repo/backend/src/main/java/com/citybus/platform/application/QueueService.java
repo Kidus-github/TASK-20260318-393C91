@@ -4,12 +4,12 @@ import com.citybus.platform.domain.FailedMessage;
 import com.citybus.platform.domain.Message;
 import com.citybus.platform.domain.QueueStatus;
 import com.citybus.platform.domain.QueuedMessage;
+import com.citybus.platform.infrastructure.observability.TraceIdContext;
 import com.citybus.platform.infrastructure.persistence.FailedMessageRepository;
 import com.citybus.platform.infrastructure.persistence.MessageRepository;
 import com.citybus.platform.infrastructure.persistence.QueuedMessageRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,29 +49,38 @@ public class QueueService {
     @Scheduled(fixedDelay = 10000)
     @Transactional
     public void consumeQueue() {
-        long backlog = queuedMessageRepository.countByStatus(QueueStatus.PENDING);
-        if (backlog > appProperties.alerts().queueBacklogThreshold()) {
-            alertService.createAlert("QUEUE_BACKLOG", "WARN", "Queue backlog threshold exceeded",
-                    "Pending queue depth is " + backlog, MDC.get("traceId"));
-        }
-        List<QueuedMessage> dueMessages = queuedMessageRepository.findTop50ByStatusAndScheduledAtBeforeOrderByScheduledAtAsc(QueueStatus.PENDING, Instant.now());
-        if (!dueMessages.isEmpty()) {
-            long p95LatencyMs = queueP95LatencyMs(dueMessages);
-            if (p95LatencyMs > appProperties.alerts().apiP95ThresholdMs()) {
-                HashMap<String, Object> summary = new HashMap<>();
-                summary.put("p95LatencyMs", p95LatencyMs);
-                summary.put("thresholdMs", appProperties.alerts().apiP95ThresholdMs());
-                summary.put("sampleSize", dueMessages.size());
-                var report = diagnosticReportService.createReport("QUEUE_LATENCY", summary, MDC.get("traceId"));
-                alertService.createAlert("QUEUE_LATENCY", "WARN", "Queue latency threshold exceeded",
-                        "Queue P95 delay is " + p95LatencyMs + "ms (reportId=" + report.getId() + ")", MDC.get("traceId"));
+        String previousTraceId = TraceIdContext.current();
+        String traceId = TraceIdContext.currentOrCreate();
+        try {
+            long backlog = queuedMessageRepository.countByStatus(QueueStatus.PENDING);
+            if (backlog > appProperties.alerts().queueBacklogThreshold()) {
+                alertService.createAlert("QUEUE_BACKLOG", "WARN", "Queue backlog threshold exceeded",
+                        "Pending queue depth is " + backlog, traceId);
             }
+            List<QueuedMessage> dueMessages = queuedMessageRepository.findTop50ByStatusAndScheduledAtBeforeOrderByScheduledAtAsc(QueueStatus.PENDING, Instant.now());
+            if (!dueMessages.isEmpty()) {
+                long p95LatencyMs = queueP95LatencyMs(dueMessages);
+                if (p95LatencyMs > appProperties.alerts().apiP95ThresholdMs()) {
+                    HashMap<String, Object> summary = new HashMap<>();
+                    summary.put("p95LatencyMs", p95LatencyMs);
+                    summary.put("thresholdMs", appProperties.alerts().apiP95ThresholdMs());
+                    summary.put("sampleSize", dueMessages.size());
+                    var report = diagnosticReportService.createReport("QUEUE_LATENCY", summary, traceId);
+                    alertService.createAlert("QUEUE_LATENCY", "WARN", "Queue latency threshold exceeded",
+                            "Queue P95 delay is " + p95LatencyMs + "ms (reportId=" + report.getId() + ")", traceId);
+                }
+            }
+            dueMessages.forEach(item -> process(item, traceId));
+        } finally {
+            TraceIdContext.restore(previousTraceId);
         }
-        dueMessages.forEach(this::process);
     }
 
-    private void process(QueuedMessage queuedMessage) {
+    private void process(QueuedMessage queuedMessage, String traceId) {
         try {
+            if (queuedMessage.getTraceId() == null || queuedMessage.getTraceId().isBlank()) {
+                queuedMessage.setTraceId(traceId);
+            }
             queuedMessage.setStatus(QueueStatus.PROCESSING);
             queuedMessageRepository.save(queuedMessage);
 
@@ -97,7 +106,7 @@ public class QueueService {
                 failedMessage.setOriginalQueueId(queuedMessage.getId());
                 failedMessage.setErrorSummary(exception.getMessage() == null ? "Unknown queue processing error" : exception.getMessage());
                 failedMessage.setPayloadHash(Integer.toHexString(queuedMessage.getPayload().hashCode()));
-                failedMessage.setTraceId(queuedMessage.getTraceId());
+                failedMessage.setTraceId((queuedMessage.getTraceId() == null || queuedMessage.getTraceId().isBlank()) ? traceId : queuedMessage.getTraceId());
                 failedMessage.setCreatedAt(Instant.now());
                 failedMessageRepository.save(failedMessage);
             } else {

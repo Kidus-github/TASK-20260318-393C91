@@ -27,9 +27,6 @@ public class PasswordResetToken {
     @Column(name = "request_token", nullable = false)
     private String requestToken;
 
-    @Column(name = "temporary_password_plain", nullable = false)
-    private String temporaryPasswordPlain;
-
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 

@@ -1,6 +1,7 @@
 package com.citybus.platform.infrastructure.security;
 
 import com.citybus.platform.infrastructure.persistence.SessionRepository;
+import com.citybus.platform.infrastructure.persistence.UserRepository;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -56,10 +57,12 @@ public class SecurityConfig {
 class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtTokenService jwtTokenService;
     private final SessionRepository sessionRepository;
+    private final UserRepository userRepository;
 
-    JwtAuthFilter(JwtTokenService jwtTokenService, SessionRepository sessionRepository) {
+    JwtAuthFilter(JwtTokenService jwtTokenService, SessionRepository sessionRepository, UserRepository userRepository) {
         this.jwtTokenService = jwtTokenService;
         this.sessionRepository = sessionRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -87,6 +90,22 @@ class JwtAuthFilter extends OncePerRequestFilter {
                 org.springframework.security.core.context.SecurityContextHolder.clearContext();
             }
         }
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof AuthenticatedUser principal) {
+            boolean temporaryPassword = userRepository.findById(principal.userId())
+                    .map(com.citybus.platform.domain.User::isTemporaryPassword)
+                    .orElse(false);
+            if (temporaryPassword && !isTemporaryPasswordAllowedPath(request.getRequestURI())) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "Password change required");
+                return;
+            }
+        }
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isTemporaryPasswordAllowedPath(String requestUri) {
+        return requestUri.equals("/api/auth/change-password")
+                || requestUri.equals("/api/auth/logout")
+                || requestUri.equals("/api/auth/me");
     }
 }

@@ -52,6 +52,10 @@ export class LoginComponent {
     this.authService.login(username ?? '', password ?? '').subscribe({
       next: response => {
         this.loading.set(false);
+        if (response.passwordChangeRequired) {
+          void this.router.navigateByUrl('/auth/change-password');
+          return;
+        }
         const route = response.profile.role === 'ADMIN'
           ? '/admin/settings'
           : response.profile.role === 'DISPATCHER'

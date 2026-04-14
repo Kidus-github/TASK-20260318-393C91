@@ -39,6 +39,13 @@ public class AuthController {
         return Map.of("status", "ok");
     }
 
+    @PostMapping("/change-password")
+    public Map<String, String> changePassword(@AuthenticationPrincipal AuthenticatedUser currentUser,
+                                              @Valid @RequestBody AuthDtos.ChangePasswordRequest request) {
+        authService.changePassword(currentUser, request);
+        return Map.of("status", "ok");
+    }
+
     @PostMapping("/recover")
     public Map<String, String> recover(@Valid @RequestBody AuthDtos.RecoverRequest request) {
         return Map.of("result", authService.recover(request));

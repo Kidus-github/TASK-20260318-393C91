@@ -2,6 +2,7 @@ package com.citybus.platform.infrastructure.scheduling;
 
 import com.citybus.platform.application.PassengerService;
 import com.citybus.platform.application.WorkflowService;
+import com.citybus.platform.infrastructure.observability.TraceIdContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -17,16 +18,34 @@ public class WorkflowSchedulers {
 
     @Scheduled(fixedDelay = 60000)
     public void releaseExpiredLeases() {
-        workflowService.releaseExpiredLeases();
+        String previousTraceId = TraceIdContext.current();
+        TraceIdContext.currentOrCreate();
+        try {
+            workflowService.releaseExpiredLeases();
+        } finally {
+            TraceIdContext.restore(previousTraceId);
+        }
     }
 
     @Scheduled(fixedDelay = 300000)
     public void escalateOldTasks() {
-        workflowService.escalateOldTasks();
+        String previousTraceId = TraceIdContext.current();
+        TraceIdContext.currentOrCreate();
+        try {
+            workflowService.escalateOldTasks();
+        } finally {
+            TraceIdContext.restore(previousTraceId);
+        }
     }
 
     @Scheduled(fixedDelay = 60000)
     public void processReminderSchedules() {
-        passengerService.processReminderSchedules();
+        String previousTraceId = TraceIdContext.current();
+        TraceIdContext.currentOrCreate();
+        try {
+            passengerService.processReminderSchedules();
+        } finally {
+            TraceIdContext.restore(previousTraceId);
+        }
     }
 }

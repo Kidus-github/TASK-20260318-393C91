@@ -190,6 +190,24 @@ public class AuthService {
     }
 
     @Transactional
+    public void changePassword(AuthenticatedUser currentUser, AuthDtos.ChangePasswordRequest request) {
+        User user = userRepository.findById(currentUser.userId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "Current password is invalid");
+        }
+        if (request.currentPassword().equals(request.newPassword())) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "New password must differ from current password");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setTemporaryPassword(false);
+        user.setUpdatedAt(Instant.now());
+        userRepository.save(user);
+        revokeAllSessions(user.getId());
+        auditService.log(user.getId(), "PASSWORD_CHANGED", "USER", user.getId().toString(), "Password updated");
+    }
+
+    @Transactional
     public void revokeAllSessions(UUID userId) {
         sessionRepository.findByUserIdAndRevokedFalse(userId).forEach(session -> {
             session.setRevoked(true);

@@ -11,6 +11,7 @@ import com.citybus.platform.infrastructure.persistence.ApprovalTaskRepository;
 import com.citybus.platform.infrastructure.persistence.WorkflowDecisionRepository;
 import com.citybus.platform.infrastructure.persistence.WorkflowRuleRepository;
 import com.citybus.platform.infrastructure.persistence.WorkflowTaskRepository;
+import com.citybus.platform.infrastructure.observability.TraceIdContext;
 import com.citybus.platform.infrastructure.security.AuthenticatedUser;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -186,47 +187,59 @@ public class WorkflowService {
 
     @Transactional
     public void releaseExpiredLeases() {
-        workflowTaskRepository.findByLeaseExpiresAtBeforeAndState(Instant.now(), WorkflowState.LEASED)
-                .forEach(task -> {
-                    task.setState(task.isEscalated() ? WorkflowState.ESCALATED : WorkflowState.PENDING);
-                    task.setAssignedUserId(null);
-                    task.setLeaseOwnerUserId(null);
-                    task.setLeaseExpiresAt(null);
-                    task.setUpdatedAt(Instant.now());
-                    workflowTaskRepository.save(task);
-                });
-        approvalTaskRepository.findByLeaseExpiresAtBeforeAndState(Instant.now(), ApprovalTaskState.LEASED)
-                .forEach(task -> {
-                    task.setState(ApprovalTaskState.PENDING);
-                    task.setAssignedUserId(null);
-                    task.setLeaseOwnerUserId(null);
-                    task.setLeaseExpiresAt(null);
-                    task.setUpdatedAt(Instant.now());
-                    approvalTaskRepository.save(task);
-                });
+        String previousTraceId = TraceIdContext.current();
+        TraceIdContext.currentOrCreate();
+        try {
+            workflowTaskRepository.findByLeaseExpiresAtBeforeAndState(Instant.now(), WorkflowState.LEASED)
+                    .forEach(task -> {
+                        task.setState(task.isEscalated() ? WorkflowState.ESCALATED : WorkflowState.PENDING);
+                        task.setAssignedUserId(null);
+                        task.setLeaseOwnerUserId(null);
+                        task.setLeaseExpiresAt(null);
+                        task.setUpdatedAt(Instant.now());
+                        workflowTaskRepository.save(task);
+                    });
+            approvalTaskRepository.findByLeaseExpiresAtBeforeAndState(Instant.now(), ApprovalTaskState.LEASED)
+                    .forEach(task -> {
+                        task.setState(ApprovalTaskState.PENDING);
+                        task.setAssignedUserId(null);
+                        task.setLeaseOwnerUserId(null);
+                        task.setLeaseExpiresAt(null);
+                        task.setUpdatedAt(Instant.now());
+                        approvalTaskRepository.save(task);
+                    });
+        } finally {
+            TraceIdContext.restore(previousTraceId);
+        }
     }
 
     @Transactional
     public void escalateOldTasks() {
-        workflowTaskRepository.findByCreatedAtBeforeAndState(Instant.now().minus(24, ChronoUnit.HOURS), WorkflowState.PENDING)
-                .forEach(task -> {
-                    task.setState(WorkflowState.ESCALATED);
-                    task.setEscalated(true);
-                    task.setUpdatedAt(Instant.now());
-                    workflowTaskRepository.save(task);
-                    var report = diagnosticReportService.createReport(
-                            "FAILED_WORKFLOW_TASKS",
-                            Map.of("taskId", task.getId().toString(), "reason", "TIMEOUT_ESCALATION", "taskType", task.getTaskType()),
-                            null
-                    );
-                    alertService.createAlert(
-                            "WORKFLOW_TIMEOUT",
-                            "WARN",
-                            "Workflow task exceeded 24 hour processing window",
-                            "Task " + task.getId() + " (" + task.getTitle() + ") escalated after timeout (reportId=" + report.getId() + ")",
-                            null
-                    );
-                });
+        String previousTraceId = TraceIdContext.current();
+        String traceId = TraceIdContext.currentOrCreate();
+        try {
+            workflowTaskRepository.findByCreatedAtBeforeAndState(Instant.now().minus(24, ChronoUnit.HOURS), WorkflowState.PENDING)
+                    .forEach(task -> {
+                        task.setState(WorkflowState.ESCALATED);
+                        task.setEscalated(true);
+                        task.setUpdatedAt(Instant.now());
+                        workflowTaskRepository.save(task);
+                        var report = diagnosticReportService.createReport(
+                                "FAILED_WORKFLOW_TASKS",
+                                Map.of("taskId", task.getId().toString(), "reason", "TIMEOUT_ESCALATION", "taskType", task.getTaskType()),
+                                traceId
+                        );
+                        alertService.createAlert(
+                                "WORKFLOW_TIMEOUT",
+                                "WARN",
+                                "Workflow task exceeded 24 hour processing window",
+                                "Task " + task.getId() + " (" + task.getTitle() + ") escalated after timeout (reportId=" + report.getId() + ")",
+                                traceId
+                        );
+                    });
+        } finally {
+            TraceIdContext.restore(previousTraceId);
+        }
     }
 
     private WorkflowDtos.TaskResponse claimApprovalTask(AuthenticatedUser currentUser, ApprovalTask approvalTask) {
@@ -382,7 +395,7 @@ public class WorkflowService {
                 diagnosticReportService.createReport(
                         "FAILED_WORKFLOW_TASKS",
                         Map.of("taskId", task.getId().toString(), "reason", "REJECTED", "taskType", task.getTaskType()),
-                        null
+                        TraceIdContext.currentOrCreate()
                 );
             }
             case "RETURN" -> task.setState(WorkflowState.RETURNED);
@@ -410,7 +423,7 @@ public class WorkflowService {
             diagnosticReportService.createReport(
                     "FAILED_WORKFLOW_TASKS",
                     Map.of("taskId", parent.getId().toString(), "reason", "REJECTED", "taskType", parent.getTaskType()),
-                    null
+                    TraceIdContext.currentOrCreate()
             );
             return List.of();
         }

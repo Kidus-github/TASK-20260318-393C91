@@ -10,6 +10,7 @@ export class AuthService {
   private readonly tokenKey = 'citybus_access_token';
   private readonly refreshKey = 'citybus_refresh_token';
   private readonly profileKey = 'citybus_profile';
+  private readonly passwordChangeRequiredKey = 'citybus_password_change_required';
 
   readonly profile = signal<UserProfile | null>(this.readProfile());
 
@@ -21,6 +22,15 @@ export class AuthService {
     );
   }
 
+  changePassword(currentPassword: string, newPassword: string) {
+    return this.http.post<{ status: string }>('/api/auth/change-password', {
+      currentPassword,
+      newPassword
+    }).pipe(
+      tap(() => this.storage.setItem(this.passwordChangeRequiredKey, 'false'))
+    );
+  }
+
   logout() {
     const refreshToken = this.storage.getItem(this.refreshKey);
     if (refreshToken) {
@@ -29,6 +39,7 @@ export class AuthService {
     this.storage.removeItem(this.tokenKey);
     this.storage.removeItem(this.refreshKey);
     this.storage.removeItem(this.profileKey);
+    this.storage.removeItem(this.passwordChangeRequiredKey);
     this.profile.set(null);
     void this.router.navigateByUrl('/login');
   }
@@ -41,10 +52,15 @@ export class AuthService {
     return !!this.accessToken() && !!this.profile();
   }
 
+  requiresPasswordChange() {
+    return this.storage.getItem(this.passwordChangeRequiredKey) === 'true';
+  }
+
   private persist(response: AuthResponse) {
     this.storage.setItem(this.tokenKey, response.accessToken);
     this.storage.setItem(this.refreshKey, response.refreshToken);
     this.storage.setItem(this.profileKey, JSON.stringify(response.profile));
+    this.storage.setItem(this.passwordChangeRequiredKey, response.passwordChangeRequired ? 'true' : 'false');
     this.profile.set(response.profile);
   }
 

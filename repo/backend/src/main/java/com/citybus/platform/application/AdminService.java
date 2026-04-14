@@ -297,25 +297,20 @@ public class AdminService {
     public AdminDtos.PasswordResetIssueResponse resetUserPassword(AuthenticatedUser currentUser, String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
-        String temporaryPassword = "Admin" + UUID.randomUUID().toString().substring(0, 8) + "!";
-        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
-        user.setTemporaryPassword(true);
-        user.setUpdatedAt(Instant.now());
-        userRepository.save(user);
-        sessionRepository.findByUserIdAndRevokedFalse(user.getId()).forEach(session -> {
-            session.setRevoked(true);
-            sessionRepository.save(session);
-        });
+
         PasswordResetToken resetToken = new PasswordResetToken();
         resetToken.setId(UUID.randomUUID());
         resetToken.setUserId(user.getId());
         resetToken.setIssuedByUserId(currentUser.userId());
         resetToken.setRequestToken("RST-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20).toUpperCase());
-        resetToken.setTemporaryPasswordPlain(temporaryPassword);
         resetToken.setExpiresAt(Instant.now().plusSeconds(300));
         resetToken.setConsumed(false);
         resetToken.setCreatedAt(Instant.now());
         passwordResetTokenRepository.save(resetToken);
+        sessionRepository.findByUserIdAndRevokedFalse(user.getId()).forEach(session -> {
+            session.setRevoked(true);
+            sessionRepository.save(session);
+        });
         auditService.log(currentUser.userId(), "ADMIN_PASSWORD_RESET_ISSUED", "USER", user.getId().toString(), username);
         return new AdminDtos.PasswordResetIssueResponse(resetToken.getRequestToken(), resetToken.getExpiresAt());
     }
@@ -327,11 +322,24 @@ public class AdminService {
         if (token.isConsumed() || token.getExpiresAt().isBefore(Instant.now())) {
             throw new ApiException(HttpStatus.CONFLICT, "Password reset token expired or consumed");
         }
+        User user = userRepository.findById(token.getUserId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "User not found"));
+
+        String temporaryPassword = "Admin" + UUID.randomUUID().toString().substring(0, 8) + "!";
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setTemporaryPassword(true);
+        user.setUpdatedAt(Instant.now());
+        userRepository.save(user);
+        sessionRepository.findByUserIdAndRevokedFalse(user.getId()).forEach(session -> {
+            session.setRevoked(true);
+            sessionRepository.save(session);
+        });
+
         token.setConsumed(true);
         token.setConsumedAt(Instant.now());
         passwordResetTokenRepository.save(token);
         auditService.log(currentUser.userId(), "ADMIN_PASSWORD_RESET_REVEALED", "USER", token.getUserId().toString(), requestToken);
-        return token.getTemporaryPasswordPlain();
+        return temporaryPassword;
     }
 
     private void validateTemplateBody(String templateType, String body) {

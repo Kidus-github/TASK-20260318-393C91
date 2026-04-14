@@ -9,6 +9,7 @@ import { DispatcherDashboardComponent } from './features/dispatcher/dispatcher-d
 import { AdminSettingsComponent } from './features/admin/admin-settings.component';
 import { NotFoundComponent } from './features/not-found/not-found.component';
 import { RoleHomeComponent } from './features/auth/role-home.component';
+import { ChangePasswordComponent } from './features/auth/change-password.component';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -21,6 +22,7 @@ export const routes: Routes = [
       { path: 'passenger/messages', component: MessageCenterComponent, canActivate: [roleGuard('PASSENGER')] },
       { path: 'dispatcher/tasks', component: DispatcherDashboardComponent, canActivate: [roleGuard('DISPATCHER')] },
       { path: 'admin/settings', component: AdminSettingsComponent, canActivate: [roleGuard('ADMIN')] },
+      { path: 'auth/change-password', component: ChangePasswordComponent },
       { path: '', pathMatch: 'full', component: RoleHomeComponent }
     ]
   },
