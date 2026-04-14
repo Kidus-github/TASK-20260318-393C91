@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: city-bus-platform
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/citybus}
+    username: ${SPRING_DATASOURCE_USERNAME:citybus}
+    password: ${SPRING_DATASOURCE_PASSWORD:citybus}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+      roles: ADMIN
+
+app:
+  version: ${APP_VERSION:1.0.0}
+  security:
+    access-token-minutes: 15
+    refresh-token-days: 7
+    access-secret: ${JWT_ACCESS_SECRET}
+    refresh-secret: ${JWT_REFRESH_SECRET}
+  reminders:
+    default-lead-minutes: 10
+    catchup-window-minutes: 15
+  queue:
+    max-retries: 3
+  search:
+    exact-weight: 10
+    prefix-weight: 7
+    pinyin-weight: 5
+    popularity-weight: 3
+    frequency-weight: 4
+  alerts:
+    queue-backlog-threshold: 25
+    api-p95-threshold-ms: 500

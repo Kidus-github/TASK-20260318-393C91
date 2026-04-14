@@ -1,0 +1,9 @@
+{
+  "prompt": "City Bus Operation and Service Coordination Platform",
+  "project_type": "Intelligent Transportation System (ITS) / Operation Management",
+  "frontend_language": "TypeScript",
+  "backend_language": "Java",
+  "frontend_framework": "Angular",
+  "backend_framework": "Spring Boot",
+  "database": "PostgreSQL"
+}

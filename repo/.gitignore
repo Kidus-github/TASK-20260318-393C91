@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.angular/
+playwright-report/
+test-results/
+backend/target/
+backend/.mvn/
+.idea/
+.vscode/
+.DS_Store
+coverage/

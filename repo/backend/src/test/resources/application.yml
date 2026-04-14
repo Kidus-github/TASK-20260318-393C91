@@ -1,0 +1,45 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/test-migration
+
+app:
+  version: test
+  security:
+    access-token-minutes: 15
+    refresh-token-days: 7
+    access-secret: 01234567890123456789012345678901
+    refresh-secret: 01234567890123456789012345678902
+  alerts:
+    queue-backlog-threshold: 25
+    api-p95-threshold-ms: 500
+  reminders:
+    default-lead-minutes: 10
+    catchup-window-minutes: 15
+  queue:
+    max-retries: 3
+  search:
+    exact-weight: 10
+    prefix-weight: 7
+    pinyin-weight: 5
+    popularity-weight: 3
+    frequency-weight: 4
+
+bootstrap:
+  admin:
+    password: Admin123!
+    recovery-code: ADMIN-RECOVERY-1
+  dispatcher:
+    password: Dispatch123!
+    recovery-code: DISPATCHER-RECOVERY-1
+  passenger:
+    password: Passenger123!
+    recovery-code: PASSENGER-RECOVERY-1
